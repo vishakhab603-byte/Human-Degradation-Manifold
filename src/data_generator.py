@@ -2,7 +2,17 @@
 
 import numpy as np
 import pandas as pd
-
+def load_real_dataset(path):
+    import pandas as pd
+    df = pd.read_csv(path)
+    return df
+    def generate_hybrid_dataset(real_df):
+    synthetic_df = generate_multimodal_data(n_samples=len(real_df))
+    
+    # Replace behavioral columns with real reaction time
+    synthetic_df["reaction_time"] = real_df["reaction_time"]
+    
+    return synthetic_df
 def generate_multimodal_data(n=1500, seed=42):
     np.random.seed(seed)
 

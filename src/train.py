@@ -1,9 +1,9 @@
 # src/train.py
 
-from data_generator import generate_multimodal_data
-from preprocessing import preprocess_data
-from models import build_fusion_model
-from hli import compute_hli
+from src.data_generator import generate_multimodal_data
+from src.preprocessing import preprocess_data
+from src.models import build_fusion_model
+from src.hli import compute_hli
 import numpy as np
 
 

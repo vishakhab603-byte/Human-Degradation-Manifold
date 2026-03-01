@@ -10,34 +10,17 @@ from src.models.base_fusion import build_base_model
 from src.metrics.hli import compute_hli
 
 
-def run_experiment():
+def evaluate_models(X, y, config, experiment_name):
 
-    config = HDMConfig()
-
-    print("Generating synthetic dataset...")
-    df = generate_synthetic_data(config.n_samples)
-
-    X = df.drop("label", axis=1).values
-    y = to_categorical(
-        df["label"],
-        num_classes=config.num_classes
-    )
-
-    # Add Gaussian noise
-    noise_level = 0.15
-    X_noisy = X + np.random.normal(0, noise_level, X.shape)
-
-    Xb = X_noisy[:, 0:2]
-    Xp = X_noisy[:, 2:4]
+    Xb = X[:, 0:2]
+    Xp = X[:, 2:4]
 
     hli_targets = np.argmax(y, axis=1).reshape(-1, 1)
 
-    # ==============================
-    # BASE MODEL
-    # ==============================
-    print("\nTraining Base Fusion Model (Noisy Data)...")
-    base_model = build_base_model(config)
+    print(f"\n===== {experiment_name} =====")
 
+    # BASE MODEL
+    base_model = build_base_model(config)
     base_history = base_model.fit(
         [Xb, Xp],
         {'classification': y, 'hli': hli_targets},
@@ -46,15 +29,10 @@ def run_experiment():
         validation_split=0.2,
         verbose=0
     )
+    base_acc = base_history.history['val_classification_accuracy'][-1]
 
-    base_val_acc = base_history.history['val_classification_accuracy'][-1]
-
-    # ==============================
     # ATTENTION MODEL
-    # ==============================
-    print("\nTraining Attention Fusion Model (Noisy Data)...")
     attention_model = build_attention_model(config)
-
     attention_history = attention_model.fit(
         [Xb, Xp],
         {'classification': y, 'hli': hli_targets},
@@ -63,21 +41,78 @@ def run_experiment():
         validation_split=0.2,
         verbose=0
     )
+    attention_acc = attention_history.history['val_classification_accuracy'][-1]
 
-    attention_val_acc = attention_history.history['val_classification_accuracy'][-1]
+    print("Base Accuracy:", base_acc)
+    print("Attention Accuracy:", attention_acc)
 
-    # ==============================
-    # HLI COMPUTATION
-    # ==============================
-    hli_values, tau = compute_hli(X_noisy)
+    return base_acc, attention_acc
 
-    print("\n===== NOISE EXPERIMENT RESULTS =====")
-    print("Base Fusion Validation Accuracy:", base_val_acc)
-    print("Attention Fusion Validation Accuracy:", attention_val_acc)
+
+def run_experiment():
+
+    config = HDMConfig()
+
+    print("Generating synthetic dataset...")
+    df = generate_synthetic_data(config.n_samples)
+
+    X = df.drop("label", axis=1).values
+    y = to_categorical(df["label"], num_classes=config.num_classes)
+
+    results = {}
+
+    # =====================================================
+    # 1️⃣ CLEAN DATA
+    # =====================================================
+    base_acc, attention_acc = evaluate_models(
+        X, y, config, "CLEAN DATA"
+    )
+    results["clean"] = (base_acc, attention_acc)
+
+    # =====================================================
+    # 2️⃣ GAUSSIAN NOISE
+    # =====================================================
+    noise_level = 0.20
+    X_noise = X + np.random.normal(0, noise_level, X.shape)
+
+    base_acc, attention_acc = evaluate_models(
+        X_noise, y, config, "GAUSSIAN NOISE"
+    )
+    results["noise"] = (base_acc, attention_acc)
+
+    # =====================================================
+    # 3️⃣ MODALITY CORRUPTION
+    # Simulate behavioral sensor failure
+    # =====================================================
+    X_corrupt = X.copy()
+
+    corruption_ratio = 0.3
+    n_corrupt = int(len(X_corrupt) * corruption_ratio)
+
+    indices = np.random.choice(len(X_corrupt), n_corrupt, replace=False)
+
+    # Corrupt only behavioral features (first 2 columns)
+    X_corrupt[indices, 0:2] = np.random.normal(
+        0, 2.5, (n_corrupt, 2)
+    )
+
+    base_acc, attention_acc = evaluate_models(
+        X_corrupt, y, config, "MODALITY CORRUPTION (Behavioral)"
+    )
+    results["corruption"] = (base_acc, attention_acc)
+
+    # =====================================================
+    # HLI Computation
+    # =====================================================
+    hli_values, tau = compute_hli(X)
+
+    print("\n===== FINAL SUMMARY =====")
+    print("Clean        -> Base:", results["clean"][0],
+          "Attention:", results["clean"][1])
+    print("Noise        -> Base:", results["noise"][0],
+          "Attention:", results["noise"][1])
+    print("Corruption   -> Base:", results["corruption"][0],
+          "Attention:", results["corruption"][1])
     print("HLI Threshold Tau:", tau)
 
-    return {
-        "base_val_acc": base_val_acc,
-        "attention_val_acc": attention_val_acc,
-        "tau": tau
-    }
+    return results, tau

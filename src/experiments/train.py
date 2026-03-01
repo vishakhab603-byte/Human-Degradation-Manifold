@@ -23,15 +23,19 @@ def run_experiment():
         num_classes=config.num_classes
     )
 
-    Xb = X[:, 0:2]
-    Xp = X[:, 2:4]
+    # Add Gaussian noise
+    noise_level = 0.15
+    X_noisy = X + np.random.normal(0, noise_level, X.shape)
+
+    Xb = X_noisy[:, 0:2]
+    Xp = X_noisy[:, 2:4]
 
     hli_targets = np.argmax(y, axis=1).reshape(-1, 1)
 
     # ==============================
     # BASE MODEL
     # ==============================
-    print("\nTraining Base Fusion Model...")
+    print("\nTraining Base Fusion Model (Noisy Data)...")
     base_model = build_base_model(config)
 
     base_history = base_model.fit(
@@ -48,7 +52,7 @@ def run_experiment():
     # ==============================
     # ATTENTION MODEL
     # ==============================
-    print("\nTraining Attention Fusion Model...")
+    print("\nTraining Attention Fusion Model (Noisy Data)...")
     attention_model = build_attention_model(config)
 
     attention_history = attention_model.fit(
@@ -65,9 +69,9 @@ def run_experiment():
     # ==============================
     # HLI COMPUTATION
     # ==============================
-    hli_values, tau = compute_hli(X)
+    hli_values, tau = compute_hli(X_noisy)
 
-    print("\n===== RESULTS =====")
+    print("\n===== NOISE EXPERIMENT RESULTS =====")
     print("Base Fusion Validation Accuracy:", base_val_acc)
     print("Attention Fusion Validation Accuracy:", attention_val_acc)
     print("HLI Threshold Tau:", tau)

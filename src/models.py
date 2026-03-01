@@ -28,25 +28,26 @@ def build_fusion_model(
     x2 = Dropout(dropout_rate)(x2)
     z_physio = Dense(32, activation='relu')(x2)
 
-    # Expand dims for attention (sequence length = 1)
-    z_behavior_exp = tf.expand_dims(z_behavior, axis=1)
-    z_physio_exp = tf.expand_dims(z_physio, axis=1)
+    from tensorflow.keras.layers import Lambda
 
-    # Cross Attention
-    attention_layer = MultiHeadAttention(num_heads=num_heads, key_dim=16)
-    attention_output = attention_layer(
-        query=z_behavior_exp,
-        value=z_physio_exp,
-        key=z_physio_exp
-    )
+# Expand dims using Lambda
+z_behavior_exp = Lambda(lambda x: tf.expand_dims(x, axis=1))(z_behavior)
+z_physio_exp = Lambda(lambda x: tf.expand_dims(x, axis=1))(z_physio)
 
-    # Residual connection
-    attention_output = attention_output + z_behavior_exp
-    attention_output = LayerNormalization()(attention_output)
+# Cross Attention
+attention_layer = MultiHeadAttention(num_heads=num_heads, key_dim=16)
+attention_output = attention_layer(
+    query=z_behavior_exp,
+    value=z_physio_exp,
+    key=z_physio_exp
+)
 
-    # Remove sequence dimension
-    attention_output = tf.squeeze(attention_output, axis=1)
+# Residual
+attention_output = Lambda(lambda x: x[0] + x[1])([attention_output, z_behavior_exp])
+attention_output = LayerNormalization()(attention_output)
 
+# Remove sequence dimension safely
+attention_output = Lambda(lambda x: tf.squeeze(x, axis=1))(attention_output)
     # Fusion
     fusion = Concatenate()([z_behavior, z_physio, attention_output])
     fusion = Dense(64, activation='relu')(fusion)

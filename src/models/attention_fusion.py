@@ -60,16 +60,19 @@ def build_attention_model(config):
         outputs=[class_output, hli_output]
     )
 
-    model.compile(
-        optimizer=Adam(config.learning_rate),
-        loss={
-            'classification': 'categorical_crossentropy',
-            'hli': 'mse'
-        },
-        metrics={
-            'classification': 'accuracy',
-            'hli': 'mse'
-        }
-    )
-
+ model.compile(
+    optimizer=Adam(config.learning_rate),
+    loss={
+        'classification': 'categorical_crossentropy',
+        'hli': 'mse'
+    },
+    loss_weights={
+        'classification': 1.0,
+        'hli': 0.2
+    },
+    metrics={
+        'classification': 'accuracy',
+        'hli': 'mse'
+    }
+)
     return model

@@ -1,3 +1,4 @@
+# src/experiments/train.py
 
 import numpy as np
 from tensorflow.keras.utils import to_categorical
@@ -5,6 +6,7 @@ from tensorflow.keras.utils import to_categorical
 from src.config import HDMConfig
 from src.data.synthetic import generate_synthetic_data
 from src.models.attention_fusion import build_attention_model
+from src.models.base_fusion import build_base_model
 from src.metrics.hli import compute_hli
 
 
@@ -24,24 +26,54 @@ def run_experiment():
     Xb = X[:, 0:2]
     Xp = X[:, 2:4]
 
-    print("Building attention fusion model...")
-    model = build_attention_model(config)
-
     hli_targets = np.argmax(y, axis=1).reshape(-1, 1)
 
-    print("Training...")
-    history = model.fit(
+    # ==============================
+    # BASE MODEL
+    # ==============================
+    print("\nTraining Base Fusion Model...")
+    base_model = build_base_model(config)
+
+    base_history = base_model.fit(
         [Xb, Xp],
-        {
-            'classification': y,
-            'hli': hli_targets
-        },
+        {'classification': y, 'hli': hli_targets},
         epochs=config.epochs,
         batch_size=config.batch_size,
-        validation_split=0.2
+        validation_split=0.2,
+        verbose=0
     )
 
-    print("Computing HLI...")
+    base_val_acc = base_history.history['val_classification_accuracy'][-1]
+
+    # ==============================
+    # ATTENTION MODEL
+    # ==============================
+    print("\nTraining Attention Fusion Model...")
+    attention_model = build_attention_model(config)
+
+    attention_history = attention_model.fit(
+        [Xb, Xp],
+        {'classification': y, 'hli': hli_targets},
+        epochs=config.epochs,
+        batch_size=config.batch_size,
+        validation_split=0.2,
+        verbose=0
+    )
+
+    attention_val_acc = attention_history.history['val_classification_accuracy'][-1]
+
+    # ==============================
+    # HLI COMPUTATION
+    # ==============================
     hli_values, tau = compute_hli(X)
 
-    return model, history, tau
+    print("\n===== RESULTS =====")
+    print("Base Fusion Validation Accuracy:", base_val_acc)
+    print("Attention Fusion Validation Accuracy:", attention_val_acc)
+    print("HLI Threshold Tau:", tau)
+
+    return {
+        "base_val_acc": base_val_acc,
+        "attention_val_acc": attention_val_acc,
+        "tau": tau
+    }

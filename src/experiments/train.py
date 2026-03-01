@@ -10,16 +10,14 @@ from src.models.base_fusion import build_base_model
 from src.metrics.hli import compute_hli
 
 
-def evaluate_models(X, y, config, experiment_name):
+def evaluate_models(X, y, config):
 
     Xb = X[:, 0:2]
     Xp = X[:, 2:4]
 
     hli_targets = np.argmax(y, axis=1).reshape(-1, 1)
 
-    print(f"\n===== {experiment_name} =====")
-
-    # BASE MODEL
+    # Base model
     base_model = build_base_model(config)
     base_history = base_model.fit(
         [Xb, Xp],
@@ -31,7 +29,7 @@ def evaluate_models(X, y, config, experiment_name):
     )
     base_acc = base_history.history['val_classification_accuracy'][-1]
 
-    # ATTENTION MODEL
+    # Attention model
     attention_model = build_attention_model(config)
     attention_history = attention_model.fit(
         [Xb, Xp],
@@ -43,9 +41,6 @@ def evaluate_models(X, y, config, experiment_name):
     )
     attention_acc = attention_history.history['val_classification_accuracy'][-1]
 
-    print("Base Accuracy:", base_acc)
-    print("Attention Accuracy:", attention_acc)
-
     return base_acc, attention_acc
 
 
@@ -53,66 +48,67 @@ def run_experiment():
 
     config = HDMConfig()
 
-    print("Generating synthetic dataset...")
-    df = generate_synthetic_data(config.n_samples)
+    seeds = list(range(10))
 
-    X = df.drop("label", axis=1).values
-    y = to_categorical(df["label"], num_classes=config.num_classes)
+    clean_results = []
+    noise_results = []
+    corruption_results = []
 
-    results = {}
+    for seed in seeds:
 
-    # =====================================================
-    # 1️⃣ CLEAN DATA
-    # =====================================================
-    base_acc, attention_acc = evaluate_models(
-        X, y, config, "CLEAN DATA"
-    )
-    results["clean"] = (base_acc, attention_acc)
+        np.random.seed(seed)
 
-    # =====================================================
-    # 2️⃣ GAUSSIAN NOISE
-    # =====================================================
-    noise_level = 0.20
-    X_noise = X + np.random.normal(0, noise_level, X.shape)
+        df = generate_synthetic_data(config.n_samples, random_state=seed)
 
-    base_acc, attention_acc = evaluate_models(
-        X_noise, y, config, "GAUSSIAN NOISE"
-    )
-    results["noise"] = (base_acc, attention_acc)
+        X = df.drop("label", axis=1).values
+        y = to_categorical(df["label"], num_classes=config.num_classes)
 
-    # =====================================================
-    # 3️⃣ MODALITY CORRUPTION
-    # Simulate behavioral sensor failure
-    # =====================================================
-    X_corrupt = X.copy()
+        # CLEAN
+        base_acc, attention_acc = evaluate_models(X, y, config)
+        clean_results.append((base_acc, attention_acc))
 
-    corruption_ratio = 0.3
-    n_corrupt = int(len(X_corrupt) * corruption_ratio)
+        # NOISE
+        X_noise = X + np.random.normal(0, 0.20, X.shape)
+        base_acc, attention_acc = evaluate_models(X_noise, y, config)
+        noise_results.append((base_acc, attention_acc))
 
-    indices = np.random.choice(len(X_corrupt), n_corrupt, replace=False)
+        # MODALITY CORRUPTION
+        X_corrupt = X.copy()
+        n_corrupt = int(len(X_corrupt) * 0.3)
+        indices = np.random.choice(len(X_corrupt), n_corrupt, replace=False)
+        X_corrupt[indices, 0:2] = np.random.normal(0, 2.5, (n_corrupt, 2))
 
-    # Corrupt only behavioral features (first 2 columns)
-    X_corrupt[indices, 0:2] = np.random.normal(
-        0, 2.5, (n_corrupt, 2)
-    )
+        base_acc, attention_acc = evaluate_models(X_corrupt, y, config)
+        corruption_results.append((base_acc, attention_acc))
 
-    base_acc, attention_acc = evaluate_models(
-        X_corrupt, y, config, "MODALITY CORRUPTION (Behavioral)"
-    )
-    results["corruption"] = (base_acc, attention_acc)
+    def summarize(results):
+        base = np.array([r[0] for r in results])
+        attn = np.array([r[1] for r in results])
+        return (
+            base.mean(), base.std(),
+            attn.mean(), attn.std()
+        )
 
-    # =====================================================
-    # HLI Computation
-    # =====================================================
-    hli_values, tau = compute_hli(X)
+    clean_summary = summarize(clean_results)
+    noise_summary = summarize(noise_results)
+    corruption_summary = summarize(corruption_results)
 
-    print("\n===== FINAL SUMMARY =====")
-    print("Clean        -> Base:", results["clean"][0],
-          "Attention:", results["clean"][1])
-    print("Noise        -> Base:", results["noise"][0],
-          "Attention:", results["noise"][1])
-    print("Corruption   -> Base:", results["corruption"][0],
-          "Attention:", results["corruption"][1])
-    print("HLI Threshold Tau:", tau)
+    print("\n===== MULTI-RUN STATISTICAL RESULTS =====")
 
-    return results, tau
+    print("\nCLEAN")
+    print("Base      -> Mean:", clean_summary[0], "Std:", clean_summary[1])
+    print("Attention -> Mean:", clean_summary[2], "Std:", clean_summary[3])
+
+    print("\nNOISE")
+    print("Base      -> Mean:", noise_summary[0], "Std:", noise_summary[1])
+    print("Attention -> Mean:", noise_summary[2], "Std:", noise_summary[3])
+
+    print("\nCORRUPTION")
+    print("Base      -> Mean:", corruption_summary[0], "Std:", corruption_summary[1])
+    print("Attention -> Mean:", corruption_summary[2], "Std:", corruption_summary[3])
+
+    return {
+        "clean": clean_summary,
+        "noise": noise_summary,
+        "corruption": corruption_summary
+    }

@@ -4,87 +4,47 @@ import numpy as np
 import pandas as pd
 
 
-def generate_synthetic_data(n_samples=1200):
-    """
-    Generates a clean, separable 3-class multimodal dataset.
-    
-    Classes:
-    0 → Stable
-    1 → Moderate Degradation
-    2 → Severe Degradation
-    """
+def generate_synthetic_data(n_samples=1000, random_state=42):
 
-    np.random.seed(42)
+    np.random.seed(random_state)
 
-    samples_per_class = n_samples // 3
+    # Behavioral signals
+    b1 = np.random.normal(0, 1, n_samples)
+    b2 = np.random.normal(0, 1, n_samples)
 
-    # ==============================
-    # CLASS 0 — STABLE
-    # ==============================
-    behavior_0 = np.random.normal(
-        loc=[0.2, 0.3],
-        scale=0.04,
-        size=(samples_per_class, 2)
+    # Physiological signals
+    p1 = np.random.normal(0, 1, n_samples)
+    p2 = np.random.normal(0, 1, n_samples)
+
+    # Cross-modal nonlinear degradation function
+    interaction_term = 0.7 * (b1 * p1)
+    nonlinear_behavior = 0.5 * (b2 ** 2)
+    physio_effect = -0.4 * p2
+
+    noise = np.random.normal(0, 0.2, n_samples)
+
+    degradation_score = (
+        interaction_term +
+        nonlinear_behavior +
+        physio_effect +
+        noise
     )
 
-    physio_0 = np.random.normal(
-        loc=[0.3, 0.2],
-        scale=0.04,
-        size=(samples_per_class, 2)
-    )
+    # Sigmoid to bound
+    degradation_score = 1 / (1 + np.exp(-degradation_score))
 
-    # ==============================
-    # CLASS 1 — MODERATE
-    # ==============================
-    behavior_1 = np.random.normal(
-        loc=[0.6, 0.55],
-        scale=0.04,
-        size=(samples_per_class, 2)
-    )
+    # Create 3 degradation classes
+    labels = np.zeros(n_samples)
 
-    physio_1 = np.random.normal(
-        loc=[0.55, 0.6],
-        scale=0.04,
-        size=(samples_per_class, 2)
-    )
-
-    # ==============================
-    # CLASS 2 — SEVERE
-    # ==============================
-    behavior_2 = np.random.normal(
-        loc=[0.9, 0.85],
-        scale=0.04,
-        size=(samples_per_class, 2)
-    )
-
-    physio_2 = np.random.normal(
-        loc=[0.85, 0.9],
-        scale=0.04,
-        size=(samples_per_class, 2)
-    )
-
-    # Stack modalities
-    behavior = np.vstack([behavior_0, behavior_1, behavior_2])
-    physio = np.vstack([physio_0, physio_1, physio_2])
-
-    labels = np.array(
-        [0] * samples_per_class +
-        [1] * samples_per_class +
-        [2] * samples_per_class
-    )
-
-    # Shuffle
-    indices = np.random.permutation(len(labels))
-    behavior = behavior[indices]
-    physio = physio[indices]
-    labels = labels[indices]
+    labels[degradation_score >= 0.33] = 1
+    labels[degradation_score >= 0.66] = 2
 
     df = pd.DataFrame({
-        "b1": behavior[:, 0],
-        "b2": behavior[:, 1],
-        "p1": physio[:, 0],
-        "p2": physio[:, 1],
-        "label": labels
+        "b1": b1,
+        "b2": b2,
+        "p1": p1,
+        "p2": p2,
+        "label": labels.astype(int)
     })
 
     return df

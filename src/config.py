@@ -1,11 +1,19 @@
-WINDOW_SIZE = 10
-TEST_SPLIT = 0.2
-RANDOM_SEED = 42
+class HDMConfig:
 
-LSTM_UNITS = 32
-DENSE_UNITS = 32
-DROPOUT_RATE = 0.3
-LEARNING_RATE = 0.001
+    # Data
+    n_samples = 1000
+    num_classes = 3
 
-EPOCHS = 20
-BATCH_SIZE = 32
+    # Model
+    dense_units = 32
+    dropout_rate = 0.3
+    num_heads = 2
+    learning_rate = 0.001
+
+    # Training
+    epochs = 20
+    batch_size = 32
+
+    # Flags
+    use_attention = True
+    use_uncertainty = True
